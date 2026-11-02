@@ -1,0 +1,1344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta property="og:title" content="Wren Word Coach">
+<meta property="og:description" content="A voice agent that teaches vocabulary: it says each word, listens to you say it back, checks your sentence, then quizzes you.">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Wren Word Coach</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Wren is a voice agent that teaches vocabulary: it says each word, listens to you say it back, asks you to use it in a sentence, then quizzes you.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&family=Young+Serif&display=swap">
+<style>
+/* Layout: a ruled index card (the word being learned) beside a live conversation column whose voice dock stays in reach; one column on phones with the dock pinned to the bottom. */
+:root {
+  --desk: #E8ECF1;
+  --paper: #FDFDFA;
+  --ink: #1B2432;
+  --muted: #5B6878;
+  --rule: #CFE0F2;
+  --margin: #CF3F3A;
+  --accent: #2851BA;
+  --accent-soft: #E2E9FA;
+  --line: #D3DAE3;
+  --ok: #1F7A4A;
+  --ok-soft: #DDF1E5;
+  --bad: #AE3520;
+  --bad-soft: #F8E3DD;
+  --think: #9A6512;
+  --shadow: 0 1px 0 rgba(27,36,50,.05), 0 12px 30px -14px rgba(27,36,50,.30);
+  --shadow-up: 0 -10px 28px -16px rgba(27,36,50,.35);
+  --f-display: "Young Serif", Georgia, "Times New Roman", serif;
+  --f-body: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --lh: 28px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --desk: #0E1217; --paper: #171D25; --ink: #E5E9EF; --muted: #97A3B3; --rule: #233043;
+    --margin: #EE6B63; --accent: #8AA9F7; --accent-soft: #1E2A45; --line: #29333F;
+    --ok: #5CC98D; --ok-soft: #15301F; --bad: #F18D76; --bad-soft: #3A211A; --think: #E2B160;
+    --shadow: 0 1px 0 rgba(0,0,0,.25), 0 14px 34px -14px rgba(0,0,0,.75);
+    --shadow-up: 0 -10px 28px -14px rgba(0,0,0,.8);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --desk: #0E1217; --paper: #171D25; --ink: #E5E9EF; --muted: #97A3B3; --rule: #233043;
+  --margin: #EE6B63; --accent: #8AA9F7; --accent-soft: #1E2A45; --line: #29333F;
+  --ok: #5CC98D; --ok-soft: #15301F; --bad: #F18D76; --bad-soft: #3A211A; --think: #E2B160;
+  --shadow: 0 1px 0 rgba(0,0,0,.25), 0 14px 34px -14px rgba(0,0,0,.75);
+  --shadow-up: 0 -10px 28px -14px rgba(0,0,0,.8);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  background: var(--desk); color: var(--ink);
+  font-family: var(--f-body); font-size: 16px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+h1, h2, h3 { text-wrap: balance; }
+
+.app {
+  max-width: 1200px; margin: 0 auto; min-height: 100%;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 16px 24px;
+  display: flex; flex-direction: column; gap: 16px;
+}
+
+/* Header */
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.brand { display: flex; align-items: baseline; gap: 12px; min-width: 0; flex-wrap: wrap; }
+.brand h1 { font-family: var(--f-display); font-weight: 400; font-size: 1.9rem; line-height: 1; margin: 0; letter-spacing: -0.01em; }
+.brand p { margin: 0; color: var(--muted); font-size: .95rem; }
+.top-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; position: relative; }
+.pill {
+  display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px;
+  border-radius: 999px; background: var(--paper); border: 1px solid var(--line);
+  font-family: var(--f-mono); font-size: .72rem; letter-spacing: .07em; text-transform: uppercase; color: var(--muted);
+  white-space: nowrap;
+}
+.pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+.pill[data-s="speaking"] { color: var(--ink); } .pill[data-s="speaking"] .dot { background: var(--margin); }
+.pill[data-s="listening"] { color: var(--ink); } .pill[data-s="listening"] .dot { background: var(--accent); animation: blink 1s ease-in-out infinite; }
+.pill[data-s="thinking"] .dot { background: var(--think); animation: blink .6s ease-in-out infinite; }
+.pill.ai { color: var(--accent); border-color: var(--accent-soft); background: var(--accent-soft); }
+.icon-btn { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: var(--paper); display: grid; place-items: center; }
+.icon-btn:hover { border-color: var(--ink); }
+@keyframes blink { 50% { opacity: .25; } }
+
+/* Settings */
+.settings {
+  position: absolute; right: 0; top: calc(100% + 8px); z-index: 30;
+  width: min(330px, calc(100vw - 32px));
+  background: var(--paper); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow);
+  padding: 16px; display: grid; gap: 14px;
+}
+.settings h2 { font-family: var(--f-mono); font-weight: 500; font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0; }
+.field { display: grid; gap: 6px; }
+.field label, .check { font-size: .92rem; }
+.field select, .field input[type="range"] { width: 100%; }
+.field select { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--desk); }
+.rate-row { display: flex; align-items: center; gap: 10px; }
+.rate-row output { font-family: var(--f-mono); font-size: .85rem; min-width: 3.5em; text-align: right; font-variant-numeric: tabular-nums; }
+.check { display: flex; gap: 10px; align-items: flex-start; }
+.check input { margin-top: 4px; accent-color: var(--accent); }
+.settings .chip { justify-self: start; }
+
+/* Main grid */
+.main {
+  display: grid; gap: 18px; min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "card" "convo" "session";
+}
+.card { grid-area: card; }
+.convo { grid-area: convo; }
+.session { grid-area: session; }
+.cansay { grid-area: cansay; display: none; }
+
+/* Index card */
+.card { background: var(--paper); border-radius: 5px; box-shadow: var(--shadow); overflow: hidden; min-width: 0; }
+.card-head { padding: 16px 22px 12px; }
+.card-meta { display: flex; justify-content: space-between; gap: 12px; font-family: var(--f-mono); font-size: .7rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.hw-row { display: flex; align-items: center; gap: 12px; margin-top: 12px; min-width: 0; }
+.hw {
+  font-family: var(--f-display); font-weight: 400; margin: 0; min-width: 0;
+  font-size: clamp(2.1rem, 3vw + 1.2rem, 3.1rem); line-height: 1.08; letter-spacing: -0.015em; overflow-wrap: anywhere;
+}
+.hw.long { font-size: clamp(1.7rem, 2.2vw + 1rem, 2.4rem); }
+.hw.masked { color: var(--muted); letter-spacing: .2em; }
+.hear { flex: none; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); background: transparent; display: grid; place-items: center; color: var(--ink); }
+.hear:hover { border-color: var(--ink); }
+.pron { margin-top: 6px; display: flex; gap: 14px; align-items: baseline; flex-wrap: wrap; min-height: 1.5em; }
+.pron .say { font-family: var(--f-mono); font-size: .95rem; letter-spacing: .02em; }
+.pron .pos { font-style: italic; color: var(--muted); }
+.card-lines {
+  border-top: 2px solid var(--margin);
+  padding: var(--lh) 22px calc(var(--lh) / 2);
+  line-height: var(--lh); font-size: 1.03rem;
+  background-image: repeating-linear-gradient(to bottom, transparent 0, transparent calc(var(--lh) - 1px), var(--rule) calc(var(--lh) - 1px), var(--rule) var(--lh));
+}
+.card-lines p { margin: 0; max-width: 60ch; }
+.card-lines .ex { font-style: italic; }
+.card-lines .gap { margin-top: var(--lh); }
+.card-lines .k { font-family: var(--f-mono); font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-right: 6px; }
+mark { background: transparent; color: inherit; font-weight: 700; text-decoration: underline; text-decoration-color: var(--margin); text-decoration-thickness: 2px; text-underline-offset: 3px; text-decoration-skip-ink: none; }
+
+/* Session list */
+.session h3, .cansay h3 { display: flex; justify-content: space-between; gap: 8px; font-family: var(--f-mono); font-weight: 500; font-size: .7rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+.session h3 span:last-child { font-variant-numeric: tabular-nums; }
+.slist { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.slist li { display: inline-flex; align-items: center; gap: 6px; padding: 3px 11px; border-radius: 999px; border: 1px solid var(--line); font-size: .9rem; color: var(--muted); background: var(--paper); }
+.slist li.done { color: var(--ink); }
+.slist li.cur { color: var(--ink); border-color: var(--ink); font-weight: 700; }
+.slist li.ok { color: var(--ok); background: var(--ok-soft); border-color: transparent; }
+.slist li.miss { color: var(--bad); background: var(--bad-soft); border-color: transparent; }
+.cansay ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 8px; }
+.cansay li { font-family: var(--f-mono); font-size: .8rem; color: var(--ink); background: var(--paper); border: 1px dashed var(--line); border-radius: 6px; padding: 2px 8px; }
+.cansay p { margin: 10px 0 0; font-size: .88rem; color: var(--muted); max-width: 46ch; }
+
+/* Conversation */
+.convo { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; display: flex; flex-direction: column; min-width: 0; }
+.log { padding: 18px 22px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; overscroll-behavior: contain; max-height: 46vh; min-height: 160px; }
+.msg { min-width: 0; }
+.msg .who { display: flex; align-items: center; gap: 8px; font-family: var(--f-mono); font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.msg p { margin: 2px 0 0; max-width: 62ch; font-size: 1.04rem; overflow-wrap: anywhere; }
+.msg.agent.speaking .who::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--margin); animation: blink 1s ease-in-out infinite; }
+.msg.you { align-self: flex-end; text-align: right; max-width: 85%; }
+.msg.you .who { justify-content: flex-end; }
+.msg.you p { color: var(--accent); }
+.msg.note p { font-size: .88rem; color: var(--muted); }
+.v { font-family: var(--f-mono); font-size: .66rem; letter-spacing: .06em; padding: 1px 8px; border-radius: 999px; text-transform: uppercase; }
+.v.ok { background: var(--ok-soft); color: var(--ok); }
+.v.bad { background: var(--bad-soft); color: var(--bad); }
+.gloss { margin-top: 8px; border: 1px solid var(--line); border-top: 2px solid var(--margin); border-radius: 4px; padding: 10px 14px; max-width: 62ch; }
+.gloss .g-h { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.gloss b { font-family: var(--f-display); font-weight: 400; font-size: 1.35rem; }
+.gloss .say { font-family: var(--f-mono); font-size: .85rem; }
+.gloss i { color: var(--muted); }
+.gloss p { margin: 4px 0 0; font-size: .98rem; }
+.summary { margin-top: 8px; border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; display: grid; gap: 10px; max-width: 62ch; }
+.summary .score { font-family: var(--f-display); font-size: 2.2rem; line-height: 1; font-variant-numeric: tabular-nums; }
+.summary .score small { font-family: var(--f-body); font-size: .95rem; color: var(--muted); margin-left: 8px; }
+
+/* Dock */
+.dock {
+  border-top: 1px solid var(--line); background: var(--paper); border-radius: 0 0 12px 12px;
+  padding: 14px 22px 16px; display: flex; flex-direction: column; gap: 12px; z-index: 10;
+}
+.dock-label { font-family: var(--f-mono); font-size: .7rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.ready { display: flex; flex-direction: column; gap: 10px; }
+.decks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.deck { text-align: left; border: 1px solid var(--line); background: transparent; border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.deck:hover { border-color: var(--muted); }
+.deck[aria-pressed="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.deck .lvl { font-family: var(--f-mono); font-size: .66rem; letter-spacing: .06em; color: var(--muted); }
+.deck .nm { font-weight: 700; }
+.deck .ds { font-size: .84rem; color: var(--muted); }
+.start {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  background: var(--ink); color: var(--paper); border: none; border-radius: 999px; padding: 13px 22px; font-weight: 700; font-size: 1.05rem;
+}
+.start:hover { opacity: .92; }
+.live { display: flex; flex-direction: column; gap: 12px; }
+.live-row { display: flex; align-items: center; gap: 16px; }
+.wave-wrap { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+#wave { width: 100%; height: 46px; display: block; }
+.interim { min-height: 1.5em; font-size: .95rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.interim.heard { color: var(--accent); }
+.mic-col { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: none; }
+.mic { width: 64px; height: 64px; border-radius: 50%; border: none; background: var(--ink); color: var(--paper); display: grid; place-items: center; position: relative; }
+.mic[data-s="listening"] { background: var(--margin); color: #fff; }
+.mic[data-s="listening"]::after { content: ""; position: absolute; inset: -7px; border-radius: 50%; border: 2px solid var(--margin); animation: ring 1.4s ease-out infinite; }
+.mic[data-s="speaking"] { background: var(--paper); color: var(--ink); box-shadow: inset 0 0 0 2px var(--ink); }
+.mic:disabled { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 2px var(--line); cursor: not-allowed; }
+.mic-label { font-family: var(--f-mono); font-size: .64rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+@keyframes ring { from { transform: scale(.92); opacity: .9; } to { transform: scale(1.18); opacity: 0; } }
+.options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.opt { text-align: left; display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--paper); font-size: 1.04rem; min-width: 0; }
+.opt:hover { border-color: var(--accent); background: var(--accent-soft); }
+.opt .key { font-family: var(--f-mono); font-size: .72rem; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 6px; flex: none; }
+.opt span:last-child { overflow-wrap: anywhere; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 6px 14px; font-size: .92rem; }
+.chip:hover { border-color: var(--accent); background: var(--accent-soft); }
+.chip.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.notice { margin: 0; font-size: .88rem; color: var(--muted); background: var(--desk); border-radius: 8px; padding: 8px 12px; }
+.ask { display: flex; gap: 8px; min-width: 0; }
+.ask input { flex: 1; min-width: 0; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--desk); }
+.ask input::placeholder { color: var(--muted); }
+.send { border: 1px solid var(--ink); background: transparent; border-radius: 10px; padding: 0 16px; font-weight: 700; }
+.send:hover { background: var(--ink); color: var(--paper); }
+
+@media (min-width: 880px) {
+  .main {
+    grid-template-columns: minmax(320px, 400px) minmax(0, 1fr);
+    grid-template-areas: "card convo" "session convo" "cansay convo";
+    grid-template-rows: auto auto 1fr;
+    align-items: start;
+  }
+  .cansay { display: block; }
+  .convo { position: sticky; top: 16px; align-self: start; height: calc(100vh - 100px); min-height: 520px; }
+  .log { flex: 1; max-height: none; min-height: 0; }
+}
+@media (max-width: 879.98px) {
+  .app { padding-bottom: calc(var(--dock-h, 240px) + 20px); }
+  .dock {
+    position: fixed; left: 0; right: 0; bottom: 0; border-radius: 16px 16px 0 0; border: 1px solid var(--line); border-bottom: none;
+    box-shadow: var(--shadow-up);
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  }
+  .convo { border-radius: 12px; }
+  .log { max-height: 44vh; }
+  .notice { display: none; }
+  .dock { gap: 10px; }
+}
+@media (max-width: 560px) {
+  .deck .ds { display: none; }
+  .deck { padding: 8px 10px; }
+  .card-head { padding: 14px 18px 10px; }
+  .card-lines { padding-left: 18px; padding-right: 18px; }
+  .log { padding: 14px 16px; }
+  .brand p { display: none; }
+  .opt { padding: 9px 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <h1>Wren</h1>
+      <p>A voice coach for new words</p>
+    </div>
+    <div class="top-right">
+      <span class="pill" id="statusPill" data-s="idle" role="status" aria-live="polite"><span class="dot"></span><span id="statusText">Ready</span></span>
+      <span class="pill" id="masteredPill" hidden></span>
+      <span class="pill ai" id="aiPill" hidden>Claude feedback</span>
+      <button class="icon-btn" id="settingsBtn" type="button" aria-expanded="false" aria-controls="settings" aria-label="Voice settings">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>
+      </button>
+      <div class="settings" id="settings" hidden>
+        <h2>Voice settings</h2>
+        <div class="field">
+          <label for="langSel">Accent</label>
+          <select id="langSel">
+            <option value="en-US">English (US)</option>
+            <option value="en-GB">English (UK)</option>
+            <option value="en-IN">English (India)</option>
+            <option value="en-AU">English (Australia)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="voiceSel">Wren’s voice</label>
+          <select id="voiceSel"><option value="">Browser default</option></select>
+        </div>
+        <div class="field">
+          <label for="rateRng">Speaking speed</label>
+          <div class="rate-row"><input type="range" id="rateRng" min="0.6" max="1.4" step="0.05" value="1"><output id="rateOut" for="rateRng">1.00×</output></div>
+        </div>
+        <label class="check" for="hfChk"><input type="checkbox" id="hfChk" checked> <span>Listen automatically after Wren speaks</span></label>
+        <label class="check" for="muteChk"><input type="checkbox" id="muteChk"> <span>Captions only (Wren stays silent)</span></label>
+        <label class="check" for="aiChk" id="aiRow" hidden><input type="checkbox" id="aiChk" checked> <span>Let Claude check my sentences and explain any word</span></label>
+        <button class="chip" id="testVoice" type="button">Test voice</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="main">
+    <article class="card" id="card">
+      <div class="card-head">
+        <div class="card-meta"><span id="cardNo">Up next</span><span id="cardDeck"></span></div>
+        <div class="hw-row">
+          <h2 class="hw" id="hw">meticulous</h2>
+          <button class="hear" id="hearBtn" type="button" aria-label="Hear the word">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>
+          </button>
+        </div>
+        <div class="pron"><span class="say" id="say"></span><span class="pos" id="pos"></span></div>
+      </div>
+      <div class="card-lines">
+        <p class="def" id="def"></p>
+        <p class="ex" id="ex"></p>
+        <p class="gap" id="synRow"><span class="k">Similar</span><span id="syn"></span></p>
+        <p id="tipRow"><span class="k">Remember</span><span id="tip"></span></p>
+      </div>
+    </article>
+
+    <section class="session" aria-label="Words in this session">
+      <h3><span id="sessTitle">Today’s words</span><span id="sessCount"></span></h3>
+      <ol class="slist" id="slist"></ol>
+    </section>
+
+    <section class="cansay" aria-label="Things you can say">
+      <h3>Things you can say</h3>
+      <ul>
+        <li>repeat</li><li>slower</li><li>spell it</li><li>example</li><li>what does it mean?</li>
+        <li>give me a hint</li><li>skip</li><li>quiz me</li><li>what does “candid” mean?</li><li>stop</li>
+      </ul>
+      <p id="cansayNote">Wren walks you through each word: hear it, say it back, use it in your own sentence, then a quick quiz.</p>
+    </section>
+
+    <section class="convo" aria-label="Conversation with Wren">
+      <div class="log" id="log" aria-live="polite"></div>
+      <div class="dock" id="dock">
+        <div class="ready" id="readyDock">
+          <span class="dock-label">Choose a word set</span>
+          <div class="decks" id="decks"></div>
+          <div class="field" id="topicRow" hidden>
+            <label for="topicIn" class="dock-label">Or ask Claude for any topic</label>
+            <div class="ask"><input id="topicIn" maxlength="60" placeholder="e.g. cooking, cricket, finance"><button class="chip" id="topicBtn" type="button">Make a set</button></div>
+          </div>
+          <button class="start" id="startBtn" type="button">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+            Start speaking session
+          </button>
+        </div>
+        <div class="live" id="liveDock" hidden>
+          <div class="live-row">
+            <div class="wave-wrap"><canvas id="wave" aria-hidden="true"></canvas><div class="interim" id="interim"></div></div>
+            <div class="mic-col"><button class="mic" id="micBtn" type="button" aria-label="Talk to Wren"></button><span class="mic-label" id="micLabel">Tap to talk</span></div>
+          </div>
+          <div class="options" id="options" hidden></div>
+          <div class="chips" id="chips"></div>
+        </div>
+        <p class="notice" id="notice" hidden></p>
+        <form class="ask" id="askForm" autocomplete="off">
+          <input id="askIn" aria-label="Type to Wren" placeholder="Type an answer, or ask “what does candid mean?”">
+          <button class="send" type="submit">Send</button>
+        </form>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+(() => {
+"use strict";
+
+/* ---------- Word bank ---------- */
+const DECKS = {
+  everyday: { name: "Everyday", short: "everyday", level: "CEFR B1–B2", blurb: "Words for daily conversation", words: [
+    { w: "meticulous", say: "muh-TIK-yuh-lus", pos: "adjective", def: "showing great attention to detail; very careful and precise", ex: "She kept meticulous notes on every recipe she tested.", syn: "thorough", tip: "From Latin metus, “fear”: so careful it’s as if you fear a single mistake." },
+    { w: "candid", say: "KAN-did", pos: "adjective", def: "honest and direct, even when the truth is uncomfortable", ex: "Thanks for your candid feedback on my draft.", syn: "frank", tip: "From Latin candidus, “shining white”: nothing is hidden." },
+    { w: "reluctant", say: "rih-LUK-tunt", pos: "adjective", def: "unwilling and hesitant to do something", ex: "He was reluctant to leave the party so early.", syn: "hesitant", tip: "From Latin reluctari, “to struggle against”: picture someone pulling back on a rope." },
+    { w: "resilient", say: "rih-ZIL-yunt", pos: "adjective", def: "able to recover quickly after something difficult", ex: "The small bakery proved resilient after a very hard year.", syn: "tough", tip: "From Latin resilire, “to spring back”, like a rubber band." },
+    { w: "ambiguous", say: "am-BIG-yoo-us", pos: "adjective", def: "open to more than one meaning; unclear", ex: "Her text was ambiguous, so I called to check what she meant.", syn: "unclear", tip: "Ambi- means “both”, as in ambidextrous: the meaning can point both ways." },
+    { w: "diligent", say: "DIL-ih-junt", pos: "adjective", def: "working hard with steady, careful effort", ex: "A diligent learner reviews a few words every day.", syn: "hardworking", tip: "Think “diligent, daily”: small, careful effort every single day." },
+    { w: "frugal", say: "FROO-gul", pos: "adjective", def: "careful with money and resources; not wasteful", ex: "Living a frugal life for a year let him travel without debt.", syn: "thrifty", tip: "From Latin frux, “fruit” or “value”: getting full value from what you have." },
+    { w: "empathy", say: "EM-puh-thee", pos: "noun", def: "the ability to understand and share another person’s feelings", ex: "Good managers listen with empathy before offering solutions.", syn: "compassion", tip: "Greek em-, “in”, plus pathos, “feeling”: feeling from inside someone else’s shoes." }
+  ]},
+  work: { name: "At work", short: "workplace", level: "CEFR B2–C1", blurb: "Meetings, emails and interviews", words: [
+    { w: "concise", say: "kun-SYSE", pos: "adjective", def: "clear and brief, using no more words than needed", ex: "Keep your interview answers concise and specific.", syn: "succinct", tip: "From Latin concidere, “to cut up”: everything extra has been cut away." },
+    { w: "pragmatic", say: "prag-MAT-ik", pos: "adjective", def: "dealing with problems in a sensible, practical way", ex: "We took a pragmatic approach and launched a smaller version first.", syn: "practical", tip: "Greek pragma, “a deed”: focused on what can actually be done." },
+    { w: "mitigate", say: "MIT-ih-gayt", pos: "verb", def: "to make something bad less severe", ex: "Daily backups mitigate the risk of losing data.", syn: "reduce", tip: "Latin mitis, “soft, gentle”: you soften the blow." },
+    { w: "leverage", say: "LEV-er-ij", pos: "verb", def: "to use something you have to gain the most advantage", ex: "She leveraged her design background to move into product management.", syn: "capitalize on", tip: "A lever lets a small push lift something heavy." },
+    { w: "articulate", say: "ar-TIK-yuh-lut", pos: "adjective", def: "able to express ideas clearly and well", ex: "He gave an articulate answer to a tricky question.", syn: "well-spoken", tip: "As a verb, “to articulate an idea”, the ending is said “layt”." },
+    { w: "proactive", say: "proh-AK-tiv", pos: "adjective", def: "acting early to prevent problems instead of waiting to react", ex: "Be proactive and flag risks before they become blockers.", syn: "forward-thinking", tip: "Pro- means “before”: you act before the problem arrives." },
+    { w: "feasible", say: "FEE-zuh-bul", pos: "adjective", def: "possible and practical to do", ex: "Is it feasible to finish the report by Friday?", syn: "doable", tip: "Related to French faire, “to do”: feasible simply means do-able." },
+    { w: "delegate", say: "DEL-ih-gayt", pos: "verb", def: "to give part of your work or responsibility to someone else", ex: "A good team lead delegates tasks and trusts the team.", syn: "hand off", tip: "As a noun, “a delegate at the summit”, the ending is said “gut”." }
+  ]},
+  lover: { name: "Word lover", short: "advanced", level: "CEFR C1–C2", blurb: "Rich words that impress", words: [
+    { w: "ephemeral", say: "ih-FEM-er-ul", pos: "adjective", def: "lasting for a very short time", ex: "The ephemeral beauty of cherry blossoms draws huge crowds every spring.", syn: "fleeting", tip: "Greek ephemeros, “lasting only a day”, like a mayfly." },
+    { w: "ubiquitous", say: "yoo-BIK-wih-tus", pos: "adjective", def: "found everywhere; seeming to be in all places at once", ex: "Smartphones became ubiquitous in less than two decades.", syn: "omnipresent", tip: "Latin ubique, “everywhere”." },
+    { w: "serendipity", say: "ser-un-DIP-ih-tee", pos: "noun", def: "the luck of finding something good by chance", ex: "Meeting my co-founder at a bus stop was pure serendipity.", syn: "happy accident", tip: "Coined in 1754 by Horace Walpole, after the fairy tale The Three Princes of Serendip." },
+    { w: "eloquent", say: "EL-uh-kwunt", pos: "adjective", def: "fluent and persuasive in speech or writing", ex: "Her eloquent speech left the whole room silent.", syn: "persuasive", tip: "Latin eloqui, “to speak out”." },
+    { w: "tenacious", say: "tuh-NAY-shus", pos: "adjective", def: "refusing to give up; holding on firmly", ex: "The tenacious reporter kept calling until she got the story.", syn: "persistent", tip: "Latin tenere, “to hold”, the same root as tenant." },
+    { w: "benevolent", say: "buh-NEV-uh-lunt", pos: "adjective", def: "kind and generous; wanting good things for others", ex: "A benevolent stranger paid for everyone’s coffee that morning.", syn: "kind-hearted", tip: "Latin bene, “well”, plus volens, “wishing”: literally well-wishing." },
+    { w: "cacophony", say: "kuh-KOF-uh-nee", pos: "noun", def: "a harsh, jarring mix of loud sounds", ex: "A cacophony of car horns filled the street during the traffic jam.", syn: "din", tip: "Greek kakos, “bad”, plus phone, “sound”." },
+    { w: "quintessential", say: "kwin-tuh-SEN-shul", pos: "adjective", def: "the most perfect or typical example of something", ex: "Hot soup on a rainy evening is quintessential comfort food.", syn: "classic", tip: "Medieval thinkers imagined a “fifth essence”, purer than earth, water, air and fire." }
+  ]}
+};
+const BUILTIN = ["everyday", "work", "lover"];
+const SESSION_SIZE = 5;
+let customWords = [];
+const allWords = () => [...BUILTIN.flatMap(id => DECKS[id].words), ...(DECKS.custom ? DECKS.custom.words : []), ...customWords];
+
+/* ---------- Helpers ---------- */
+const $ = (s) => document.querySelector(s);
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+function clamp(v, a, b) { return Math.min(b, Math.max(a, v)); }
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+function escRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+function norm(s) { return String(s).toLowerCase().replace(/[’‘`]/g, "'").replace(/[^a-z0-9'\- ]+/g, " ").replace(/'/g, " ").replace(/\s+/g, " ").trim(); }
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
+function art(pos) { return /^[aeiou]/i.test(pos) ? "an" : "a"; }
+function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+function listJoin(a) { return a.length < 2 ? (a[0] || "") : a.slice(0, -1).join(", ") + " and " + a[a.length - 1]; }
+function lev(a, b) {
+  if (a === b) return 0; if (!a.length) return b.length; if (!b.length) return a.length;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[b.length];
+}
+function sim(a, b) { if (!a || !b) return 0; return 1 - lev(a, b) / Math.max(a.length, b.length); }
+function stemOf(w) { return w.length > 6 ? w.slice(0, w.length - 2) : w.slice(0, Math.max(4, w.length - 1)); }
+/* How close any recognised phrase is to the target word (0..1). */
+function heardScore(alts, target) {
+  const tgt = target.toLowerCase().replace(/[\s-]/g, "");
+  let best = 0;
+  for (const alt of alts) {
+    const t = norm(alt).replace(/-/g, " ");
+    if (!t) continue;
+    const toks = t.split(" ");
+    if (toks.includes(target.toLowerCase())) return 1;
+    for (let i = 0; i < toks.length; i++) {
+      let s = "";
+      for (let j = i; j < Math.min(toks.length, i + 4); j++) { s += toks[j]; best = Math.max(best, sim(s, tgt)); }
+    }
+  }
+  return best;
+}
+function containsWord(text, target) {
+  const t = norm(text), st = stemOf(target.toLowerCase());
+  if (new RegExp("(^|\\s)" + escRe(st)).test(t)) return true;
+  return t.split(" ").some(tok => tok.length >= 4 && sim(tok, target.toLowerCase()) >= 0.8);
+}
+function wordCount(t) { return norm(t).split(" ").filter(Boolean).length; }
+function highlight(text, word) {
+  let html = esc(text);
+  if (word) html = html.replace(new RegExp("\\b(" + escRe(stemOf(word)) + "[a-z]*)", "gi"), "<mark>$1</mark>");
+  return html;
+}
+function spellOut(w) { return w.toUpperCase().split("").filter(c => /[A-Z]/.test(c)).join(", "); }
+
+/* ---------- State & preferences ---------- */
+function loadPrefs() { try { return JSON.parse(localStorage.getItem("wren.v1") || "{}") || {}; } catch (e) { return {}; } }
+const prefs = loadPrefs();
+const navLang = (navigator.language || "en-US").replace("_", "-");
+const LANGS = ["en-US", "en-GB", "en-IN", "en-AU"];
+const state = {
+  deckId: DECKS[prefs.deckId] && BUILTIN.includes(prefs.deckId) ? prefs.deckId : "everyday",
+  words: [], idx: 0, phase: "ready", attempts: 0, silences: 0,
+  results: {}, quiz: [], qi: 0, score: 0, missed: [], options: [], lastPrompt: null,
+  rate: clamp(Number(prefs.rate) || 1, 0.6, 1.4), voiceURI: prefs.voiceURI || "", voice: null,
+  lang: LANGS.includes(prefs.lang) ? prefs.lang : (LANGS.find(l => l.toLowerCase() === navLang.toLowerCase()) || "en-US"),
+  handsFree: prefs.handsFree !== false, muted: !!prefs.muted, aiOn: prefs.aiOn !== false,
+  mic: "unknown", probing: false, listening: false, speaking: false, thinking: false, paused: false, busy: false,
+  mastered: new Set(Array.isArray(prefs.mastered) ? prefs.mastered : []), started: false
+};
+function savePrefs() {
+  try {
+    localStorage.setItem("wren.v1", JSON.stringify({
+      deckId: BUILTIN.includes(state.deckId) ? state.deckId : "everyday", rate: state.rate, voiceURI: state.voiceURI, lang: state.lang,
+      handsFree: state.handsFree, muted: state.muted, aiOn: state.aiOn, mastered: [...state.mastered]
+    }));
+  } catch (e) { /* storage unavailable: settings last for this visit only */ }
+}
+const deck = () => DECKS[state.deckId] || DECKS.everyday;
+const curWord = () => (["repeat", "sentence"].includes(state.phase) ? state.words[state.idx] : null) || null;
+const res = (w) => (state.results[w.w] = state.results[w.w] || {});
+
+/* ---------- DOM ---------- */
+const el = {
+  log: $("#log"), dock: $("#dock"), readyDock: $("#readyDock"), liveDock: $("#liveDock"), decks: $("#decks"), startBtn: $("#startBtn"),
+  topicRow: $("#topicRow"), topicIn: $("#topicIn"), topicBtn: $("#topicBtn"),
+  mic: $("#micBtn"), micLabel: $("#micLabel"), interim: $("#interim"), options: $("#options"), chips: $("#chips"), notice: $("#notice"),
+  form: $("#askForm"), input: $("#askIn"), pill: $("#statusPill"), statusText: $("#statusText"), mastered: $("#masteredPill"), aiPill: $("#aiPill"),
+  card: $("#card"), cardNo: $("#cardNo"), cardDeck: $("#cardDeck"), hw: $("#hw"), hear: $("#hearBtn"), say: $("#say"), pos: $("#pos"),
+  def: $("#def"), ex: $("#ex"), syn: $("#syn"), tip: $("#tip"), synRow: $("#synRow"), tipRow: $("#tipRow"),
+  slist: $("#slist"), sessTitle: $("#sessTitle"), sessCount: $("#sessCount"),
+  settingsBtn: $("#settingsBtn"), settings: $("#settings"), langSel: $("#langSel"), voiceSel: $("#voiceSel"), rate: $("#rateRng"), rateOut: $("#rateOut"),
+  hf: $("#hfChk"), mute: $("#muteChk"), aiRow: $("#aiRow"), aiChk: $("#aiChk"), test: $("#testVoice"), wave: $("#wave")
+};
+const ICON = {
+  mic: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
+  stop: '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>',
+  off: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M4 4l16 16"/></svg>',
+  dots: '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><circle cx="6" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="18" cy="12" r="2"/></svg>'
+};
+
+/* ---------- Transcript ---------- */
+function scrollLog() { requestAnimationFrame(() => { el.log.scrollTop = el.log.scrollHeight; }); }
+function addAgent(text, word, extraHtml) {
+  const d = document.createElement("div");
+  d.className = "msg agent";
+  d.innerHTML = '<span class="who">Wren</span><p>' + highlight(text, word) + "</p>" + (extraHtml || "");
+  el.log.appendChild(d); scrollLog(); return d;
+}
+function addUser(text, source) {
+  const d = document.createElement("div");
+  d.className = "msg you";
+  const how = source === "voice" ? "said" : source === "tap" ? "tapped" : "typed";
+  d.innerHTML = '<span class="who">You · ' + how + '</span><p>' + esc(text) + "</p>";
+  el.log.appendChild(d); scrollLog(); return d;
+}
+function markUser(node, ok, label) {
+  if (!node) return;
+  const who = node.querySelector(".who");
+  const v = document.createElement("span");
+  v.className = "v " + (ok ? "ok" : "bad"); v.textContent = label || (ok ? "Correct" : "Try again");
+  who.prepend(v);
+}
+function addNote(text) {
+  const d = document.createElement("div");
+  d.className = "msg note"; d.innerHTML = "<p>" + esc(text) + "</p>";
+  el.log.appendChild(d); scrollLog(); return d;
+}
+function glossHtml(e) {
+  return '<div class="gloss"><div class="g-h"><b>' + esc(e.w) + '</b><span class="say">' + esc(e.say || "") + "</span><i>" + esc(e.pos || "") + "</i></div><p>" + esc(cap(e.def)) + ".</p><p><i>" + highlight(e.ex, e.w) + "</i></p></div>";
+}
+
+/* ---------- Speech output ---------- */
+const synth = ("speechSynthesis" in window) ? window.speechSynthesis : null;
+let voices = [];
+function loadVoices() {
+  if (!synth) return;
+  try { voices = synth.getVoices().filter(v => /^en([-_]|$)/i.test(v.lang)); } catch (e) { voices = []; }
+  pickVoice(); renderVoiceSelect();
+}
+function pickVoice() {
+  let v = voices.find(x => x.voiceURI === state.voiceURI);
+  if (!v) {
+    const lang = state.lang.toLowerCase();
+    const same = voices.filter(x => x.lang.replace("_", "-").toLowerCase() === lang);
+    const pool = same.length ? same : voices;
+    const score = x => (/natural|neural|online|premium|enhanced/i.test(x.name) ? 4 : 0) + (/google/i.test(x.name) ? 3 : 0) +
+      (/samantha|daniel|karen|moira|aria|jenny|sonia|neerja|rishi|ava|allison|serena|libby|natasha/i.test(x.name) ? 2 : 0);
+    v = pool.slice().sort((a, b) => score(b) - score(a))[0] || null;
+  }
+  state.voice = v;
+}
+function renderVoiceSelect() {
+  const cur = state.voice ? state.voice.voiceURI : "";
+  el.voiceSel.innerHTML = '<option value="">Browser default</option>' + voices.map(v =>
+    '<option value="' + esc(v.voiceURI) + '"' + (v.voiceURI === cur ? " selected" : "") + ">" + esc(v.name + " (" + v.lang + ")") + "</option>").join("");
+}
+if (synth) {
+  loadVoices();
+  if (typeof synth.addEventListener === "function") synth.addEventListener("voiceschanged", loadVoices);
+  else synth.onvoiceschanged = loadVoices;
+}
+function chunks(t) { return (String(t).match(/[^.!?;:]+[.!?;:]*["”’)]*\s*/g) || [String(t)]).map(s => s.trim()).filter(Boolean); }
+
+let gen = 0, curFin = null;
+function speakOne(text, rate, myGen) {
+  return new Promise(resolve => {
+    if (myGen !== gen) return resolve(false);
+    const u = new SpeechSynthesisUtterance(text);
+    if (state.voice) { u.voice = state.voice; u.lang = state.voice.lang; } else u.lang = state.lang;
+    u.rate = rate; u.pitch = 1;
+    let done = false;
+    const fin = () => { if (done) return; done = true; clearTimeout(timer); if (curFin === fin) curFin = null; resolve(myGen === gen); };
+    curFin = fin;
+    u.onend = fin; u.onerror = fin;
+    u.onboundary = () => bumpWave(0.55);
+    const timer = setTimeout(fin, 2500 + text.length * 115 / rate);
+    try { synth.resume(); } catch (e) { /* ignore */ }
+    try { synth.speak(u); } catch (e) { fin(); }
+  });
+}
+async function speakParts(parts, myGen) {
+  if (!synth || state.muted) { await sleep(state.muted ? 420 : 250); return myGen === gen; }
+  if (synth.speaking || synth.pending) { try { synth.cancel(); } catch (e) { /* ignore */ } await sleep(40); }
+  for (const p of parts) {
+    const rate = clamp(p.rate || state.rate, 0.5, 1.6);
+    for (const c of chunks(p.text)) { if (!(await speakOne(c, rate, myGen))) return false; }
+  }
+  return myGen === gen;
+}
+
+/* Wren's turns are queued so captions, card changes and speech stay in step. */
+const queue = []; let pumping = false;
+function agentSay(parts, opts = {}) {
+  const ps = parts.filter(Boolean).map(p => typeof p === "string" ? { text: p } : p);
+  if (!ps.length) return;
+  const item = { parts: ps, text: opts.caption || ps.map(p => p.text).join(" "), onStart: opts.onStart, html: opts.html, word: opts.word !== undefined ? opts.word : (curWord() && curWord().w) };
+  if (opts.prompt) state.lastPrompt = { parts: ps, word: item.word };
+  queue.push(item);
+  pump();
+}
+function startItem(item) {
+  try { if (item.onStart) item.onStart(); } catch (e) { console.error(e); }
+  item.node = addAgent(item.text, item.word, item.html);
+}
+async function pump() {
+  if (pumping) return;
+  pumping = true;
+  let interrupted = false;
+  while (queue.length) {
+    const item = queue.shift();
+    const myGen = gen;
+    startItem(item);
+    state.speaking = !!synth && !state.muted; updateUI();
+    item.node.classList.add("speaking");
+    const ok = await speakParts(item.parts, myGen);
+    item.node.classList.remove("speaking");
+    interrupted = !ok;
+  }
+  pumping = false;
+  state.speaking = false; updateUI();
+  if (!interrupted) afterSpeech();
+}
+function stopSpeaking() {
+  gen++;
+  const pending = queue.splice(0);
+  for (const it of pending) startItem(it);
+  if (synth) { try { synth.cancel(); } catch (e) { /* ignore */ } }
+  if (curFin) curFin();
+  state.speaking = false; updateUI();
+}
+let primed = false;
+function primeSpeech() {
+  if (!synth || primed) return;
+  primed = true;
+  try { const u = new SpeechSynthesisUtterance(" "); u.volume = 0; synth.speak(u); } catch (e) { /* ignore */ }
+}
+async function afterSpeech() {
+  updateUI();
+  if (state.paused || state.busy) return;
+  if (["repeat", "sentence", "quiz", "summary"].includes(state.phase) && state.mic === "ok" && state.handsFree) {
+    await sleep(250);
+    if (!state.speaking && !queue.length && !state.listening && !state.paused && !state.busy) listen();
+  }
+}
+
+/* ---------- Speech input ---------- */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+let rec = null;
+function setMic(status) {
+  state.mic = status;
+  if (status === "blocked") el.notice.textContent = "This page can’t use your microphone, so type or tap your answers. Wren still talks you through every word.";
+  else if (status === "unsupported") el.notice.textContent = "This browser doesn’t support voice input (Chrome, Edge and Safari do). Type or tap your answers; Wren still talks.";
+  el.notice.hidden = !(status === "blocked" || status === "unsupported");
+  if (!synth && status !== "ok") el.notice.textContent += " Speech is also unavailable, so you’ll see captions only.";
+  updateUI(); renderChips(); fitDock();
+}
+function probeMic() {
+  return new Promise(resolve => {
+    if (!SR) return resolve("unsupported");
+    let r;
+    try { r = new SR(); } catch (e) { return resolve("unsupported"); }
+    let settled = false, started = false;
+    const done = (v) => {
+      if (settled) return; settled = true; clearTimeout(t);
+      try { r.abort(); } catch (e) { /* ignore */ }
+      resolve(v);
+    };
+    r.lang = state.lang;
+    r.onstart = () => { started = true; };
+    r.onaudiostart = () => done("ok");
+    r.onerror = (e) => done(["not-allowed", "service-not-allowed", "audio-capture", "network"].includes(e.error) ? "blocked" : (started ? "ok" : "blocked"));
+    r.onend = () => done(started ? "ok" : "blocked");
+    const t = setTimeout(() => done("ok"), 12000);
+    try { r.start(); } catch (e) { done("blocked"); }
+  });
+}
+function listen() {
+  if (state.mic !== "ok" || state.listening || state.busy) return;
+  if (state.speaking || queue.length) stopSpeaking();
+  let r;
+  try { r = new SR(); } catch (e) { setMic("unsupported"); return; }
+  rec = r;
+  r.lang = state.lang; r.interimResults = true; r.maxAlternatives = 3; r.continuous = false;
+  let finalAlts = null, gotSpeech = false;
+  const guard = setTimeout(() => { try { r.stop(); } catch (e) { /* ignore */ } }, 15000);
+  r.onstart = () => { state.listening = true; showInterim("Listening…", false); updateUI(); };
+  r.onresult = (e) => {
+    let interim = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const rr = e.results[i];
+      if (rr.isFinal) finalAlts = Array.from(rr).map(a => a.transcript).filter(Boolean);
+      else interim += rr[0].transcript;
+    }
+    gotSpeech = true;
+    showInterim(interim || (finalAlts && finalAlts[0]) || "", true);
+    bumpWave(0.8);
+  };
+  r.onerror = (e) => {
+    if (["not-allowed", "service-not-allowed", "audio-capture"].includes(e.error)) setMic("blocked");
+    else if (e.error === "network") { setMic("blocked"); addNote("Voice recognition couldn’t reach its service, so I’ve switched to typing."); }
+  };
+  r.onend = () => {
+    clearTimeout(guard);
+    if (rec === r) rec = null;
+    state.listening = false; showInterim("", false); updateUI();
+    if (r._aborted) return;
+    if (finalAlts && finalAlts[0] && finalAlts[0].trim()) {
+      state.silences = 0;
+      const alts = finalAlts;
+      handleInput(alts[0], { source: "voice", alts });
+    } else if (state.mic === "ok" && !state.paused) {
+      state.silences++;
+      if (state.silences < 2 && state.handsFree && !gotSpeech) listen();
+      else showInterim("Tap the mic when you’re ready.", false);
+    }
+  };
+  try { r.start(); } catch (e) { rec = null; state.listening = false; updateUI(); }
+}
+function finishListening() { if (rec) { try { rec.stop(); } catch (e) { /* ignore */ } } }
+function abortListening() {
+  if (rec) { const r = rec; rec = null; r._aborted = true; try { r.abort(); } catch (e) { /* ignore */ } }
+  state.listening = false; updateUI();
+}
+function showInterim(text, heard) { el.interim.textContent = heard && text ? "“" + text + "”" : text; el.interim.classList.toggle("heard", !!heard); }
+
+/* ---------- Claude (only where the viewer allows it) ---------- */
+let sampleFn = null;
+(async () => {
+  try {
+    if (!window.claude || typeof window.claude.use !== "function") return;
+    const s = await window.claude.use("sample");
+    if (s) { sampleFn = s; renderAI(); }
+  } catch (e) { /* not available */ }
+})();
+const aiReady = () => !!sampleFn && state.aiOn;
+function renderAI() {
+  el.aiRow.hidden = !sampleFn;
+  el.aiPill.hidden = !aiReady();
+  el.topicRow.hidden = !aiReady();
+  el.aiChk.checked = state.aiOn;
+  el.input.placeholder = aiReady() ? "Type an answer, or ask “what does gregarious mean?”" : "Type an answer, or ask “what does candid mean?”";
+  fitDock();
+}
+async function aiJSON(prompt) {
+  if (!aiReady()) return null;
+  state.busy = true; state.thinking = true; updateUI();
+  try { return await sampleFn.json(prompt, { modelTier: "quick" }); }
+  catch (e) {
+    const code = e && e.code;
+    if (["not_granted", "sampling_disabled", "not_declared", "capability_disabled", "capability_removed"].includes(code)) {
+      sampleFn = null; renderAI();
+      addNote("Claude isn’t available for this page, so I’ll use my built-in checks.");
+    } else if (code === "rate_limited") addNote("Claude is busy right now, so I’ll use my built-in checks for a bit.");
+    return null;
+  } finally { state.busy = false; state.thinking = false; updateUI(); }
+}
+function cleanEntry(o) {
+  if (!o || typeof o !== "object") return null;
+  const w = String(o.w || o.word || "").toLowerCase().trim();
+  if (!/^[a-z][a-z' -]{1,30}$/.test(w)) return null;
+  const def = String(o.def || o.definition || "").trim().replace(/\.$/, "");
+  const ex = String(o.ex || o.example || "").trim();
+  if (!def || !ex) return null;
+  return { w, say: String(o.say || "").slice(0, 40), pos: String(o.pos || "word").toLowerCase().slice(0, 20), def: def.slice(0, 160), ex: ex.slice(0, 220), syn: String(o.syn || "").slice(0, 40), tip: String(o.tip || "").slice(0, 200) };
+}
+const ENTRY_SHAPE = '{"w": "the word in lowercase", "say": "phonetic respelling with the stressed syllable in capitals, like muh-TIK-yuh-lus", "pos": "noun, verb, adjective or adverb", "def": "a plain definition under 15 words that reads naturally after the word meaning", "ex": "one natural example sentence that uses the word", "syn": "one synonym or short related phrase", "tip": "one short memory tip or word origin, under 20 words"}';
+async function aiWord(word) {
+  const r = await aiJSON("You are helping an English vocabulary learner. Explain the word \"" + word.slice(0, 40) + "\". If it is not a real English word, reply with {\"w\": \"\"}. Otherwise reply with only one JSON object in this shape: " + ENTRY_SHAPE);
+  return cleanEntry(r);
+}
+async function aiDeck(topic) {
+  const r = await aiJSON("Create a short vocabulary lesson: 5 useful English words connected to the topic \"" + topic.slice(0, 60) + "\", suitable for an intermediate adult learner. Avoid very basic words. Reply with only a JSON array of 5 objects, each in this shape: " + ENTRY_SHAPE);
+  return Array.isArray(r) ? r.map(cleanEntry).filter(Boolean).slice(0, 5) : [];
+}
+async function aiJudge(w, sentence) {
+  const r = await aiJSON([
+    "You are Wren, a warm, encouraging vocabulary coach who speaks aloud to a learner.",
+    "Target word: \"" + w.w + "\" (" + w.pos + "), meaning: " + w.def + ".",
+    "The learner was asked to use the word in a sentence of their own. It came from speech recognition or typing, so ignore capitalisation, punctuation and small transcription slips:",
+    "\"" + sentence.slice(0, 400) + "\"",
+    "Decide whether the word is used with the right meaning and natural grammar.",
+    "Reply with only a JSON object: {\"ok\": true or false, \"say\": \"one or two short, specific spoken sentences of feedback, under 35 words, no markdown or emoji\", \"better\": \"a corrected or more natural version of their sentence, or an empty string if it is already good\"}"
+  ].join("\n"));
+  if (!r || typeof r.say !== "string" || !r.say.trim()) return null;
+  return { ok: r.ok !== false, say: r.say.trim().slice(0, 300), better: typeof r.better === "string" ? r.better.trim().slice(0, 240) : "" };
+}
+
+/* ---------- Lesson flow ---------- */
+function chooseWords(d, exclude = []) {
+  const ws = d.words.slice();
+  const rank = w => (exclude.includes(w.w) ? 2 : 0) + (state.mastered.has(w.w) ? 1 : 0);
+  return ws.map((w, i) => ({ w, i })).sort((a, b) => rank(a.w) - rank(b.w) || a.i - b.i).slice(0, Math.min(SESSION_SIZE, ws.length)).map(x => x.w);
+}
+async function startSession(words, opts = {}) {
+  stopSpeaking(); abortListening();
+  const d = deck();
+  state.words = words || chooseWords(d, opts.fresh ? state.words.map(w => w.w) : []);
+  state.idx = 0; state.results = {}; state.quiz = []; state.qi = 0; state.score = 0; state.missed = [];
+  state.paused = false; state.phase = "starting";
+  showLive(); renderSession(); renderChips();
+  if (state.mic === "unknown") {
+    state.probing = true; updateUI();
+    setMic(await probeMic());
+    state.probing = false; updateUI();
+  }
+  const first = !state.started; state.started = true;
+  const n = state.words.length;
+  const lines = [];
+  if (first) lines.push("Hi, I'm Wren, your vocabulary coach.");
+  if (opts.single) lines.push("Let's practise " + state.words[0].w + ".");
+  else if (opts.again) lines.push("Let's go through those " + n + " words once more.");
+  else lines.push("Let's learn " + n + " " + d.short + " words.");
+  if (first) lines.push(state.mic === "ok" ? "Talk to me any time. You can say repeat, slower, spell it, or skip." : "I can't hear you on this page, so type or tap your answers. I'll still talk you through everything.");
+  agentSay(lines, { word: null });
+  teachWord();
+}
+function teachWord() {
+  const w = state.words[state.idx];
+  state.phase = "repeat"; state.attempts = 0; state.silences = 0;
+  const voice = state.mic === "ok";
+  agentSay([
+    "Word " + (state.idx + 1) + ":", { text: w.w + ".", rate: state.rate * 0.85 },
+    "It's " + art(w.pos) + " " + w.pos + " meaning " + w.def + ".",
+    "For example: " + w.ex,
+    voice ? "Now you say it: " + w.w + "." : "Type " + w.w + " to practise the spelling."
+  ], { word: w.w, prompt: true, onStart: () => { renderCard(w, "learn"); renderSession(); renderChips(); } });
+}
+function nextWord() {
+  state.idx++;
+  if (state.idx < state.words.length) teachWord();
+  else if (state.words.length >= 3) startQuiz(state.words);
+  else {
+    state.phase = "summary"; renderChips();
+    agentSay(["That's it for this one. Say new words for a fresh set, or ask me to teach you another word."], { prompt: true, word: null });
+  }
+}
+function praise() { return pick(["Nice!", "Perfect.", "That's it.", "Spot on.", "Great."]); }
+
+function onRepeat(t, raw, meta) {
+  const w = state.words[state.idx];
+  if (meta.source === "voice") {
+    const score = heardScore(meta.alts || [raw], w.w);
+    if (score >= 0.7) {
+      res(w).said = true; markUser(meta.el, true, "Got it");
+      toSentence(w, praise() + " You said it clearly.");
+    } else {
+      state.attempts++;
+      markUser(meta.el, false, "Close");
+      if (state.attempts < 2) agentSay(["I heard “" + raw + "”. Listen carefully:", { text: w.w + ".", rate: state.rate * 0.7 }, "Your turn."], { word: w.w, prompt: false });
+      else toSentence(w, "That one's tricky, and recognisers struggle with it too. We'll keep practising.");
+    }
+  } else {
+    const typed = t.replace(/[\s'-]/g, ""), target = w.w.replace(/[\s'-]/g, "");
+    if (typed === target) {
+      res(w).said = true; markUser(meta.el, true, "Spelled right");
+      toSentence(w, "Spelled perfectly.");
+    } else {
+      state.attempts++;
+      markUser(meta.el, false, lev(typed, target) <= 2 ? "Almost" : "Try again");
+      if (state.attempts < 2) agentSay([(lev(typed, target) <= 2 ? "Almost." : "Not quite.") + " It's spelled", { text: spellOut(w.w) + ".", rate: state.rate * 0.85 }, "Try typing it once more."], { word: w.w });
+      else toSentence(w, "It's spelled " + spellOut(w.w) + ". You'll get it next time.");
+    }
+  }
+}
+function toSentence(w, lead) {
+  state.phase = "sentence"; state.attempts = 0; renderChips();
+  agentSay([lead, "Now use " + w.w + " in a sentence of your own."], { word: w.w, prompt: true });
+}
+async function onSentence(t, raw, meta) {
+  const w = state.words[state.idx];
+  let sentence = raw;
+  if (meta.alts) { const hit = meta.alts.find(a => containsWord(a, w.w)); if (hit) sentence = hit; }
+  if (!containsWord(sentence, w.w)) {
+    state.attempts++; markUser(meta.el, false, "Missing word");
+    if (state.attempts < 2) agentSay(["I didn't catch " + w.w + " in that. Try a sentence that includes it."], { word: w.w });
+    else finishWord(w, false, ["Here's one you could say: " + w.ex]);
+    return;
+  }
+  if (wordCount(sentence) < 4) {
+    state.attempts++; markUser(meta.el, false, "Too short");
+    if (state.attempts < 2) agentSay(["Good start. Can you build a full sentence around " + w.w + "?"], { word: w.w });
+    else finishWord(w, true, ["Here's a fuller one: " + w.ex]);
+    return;
+  }
+  if (sim(norm(sentence), norm(w.ex)) > 0.85) {
+    state.attempts++; markUser(meta.el, false, "My example");
+    agentSay(["That's my example! Try one about your own life."], { word: w.w });
+    if (state.attempts >= 2) finishWord(w, true, []);
+    return;
+  }
+  if (aiReady()) {
+    showInterim("Wren is reading your sentence…", false);
+    const j = await aiJudge(w, sentence);
+    showInterim("", false);
+    if (j) {
+      markUser(meta.el, j.ok, j.ok ? "Well used" : "Not quite");
+      if (!j.ok && state.attempts === 0) {
+        state.attempts++;
+        agentSay([j.say, j.better ? "You could say: " + j.better : "", "Want to try another sentence with " + w.w + "?"], { word: w.w });
+        return;
+      }
+      finishWord(w, j.ok, [j.say, j.better && j.better.toLowerCase() !== sentence.toLowerCase() ? "You could also say: " + j.better : ""]);
+      return;
+    }
+  }
+  markUser(meta.el, true, "Nice");
+  finishWord(w, true, [pick(["Nice sentence.", "That works well.", "Great, that sounds natural.", "Lovely, that's a real-life use."]), w.tip ? "Memory tip: " + w.tip : ""]);
+}
+function finishWord(w, ok, lines) {
+  res(w).sentence = ok;
+  state.phase = "between";
+  agentSay(lines, { word: w.w });
+  nextWord();
+}
+function skipWord() {
+  const w = state.words[state.idx];
+  res(w).skipped = true;
+  state.phase = "between";
+  agentSay(["No problem. " + cap(w.w) + " will come back in the quiz."], { word: w.w });
+  nextWord();
+}
+
+/* Quiz */
+function startQuiz(pool) {
+  state.quiz = shuffle(pool.slice()); state.qi = 0; state.score = 0; state.missed = [];
+  state.phase = "quiz";
+  agentSay(["Quiz time. I'll give you a meaning, and you tell me the word."], { word: null });
+  askQuiz();
+}
+function buildOptions(q) {
+  const others = state.quiz.filter(w => w.w !== q.w);
+  const extra = shuffle(allWords().filter(w => w.w !== q.w && !others.some(o => o.w === w.w)));
+  const distract = shuffle(others).concat(extra).slice(0, 3);
+  return shuffle([q, ...distract]).map(w => w.w);
+}
+function askQuiz() {
+  const q = state.quiz[state.qi];
+  state.phase = "quiz"; state.options = buildOptions(q); state.hinted = false;
+  agentSay(["Question " + (state.qi + 1) + " of " + state.quiz.length + ". Which word means " + q.def + "?"],
+    { word: null, prompt: true, onStart: () => { renderCard(q, "quiz"); renderOptions(); renderChips(); renderSession(); } });
+}
+function matchOption(raw, alts) {
+  const t = norm(raw);
+  const opts = state.options || [];
+  const letter = t.match(/^(?:option |answer |the )?([abcd]|first|second|third|fourth|one|two|three|four|1|2|3|4)(?: one)?$/);
+  if (letter) {
+    const map = { a: 0, b: 1, c: 2, d: 3, first: 0, second: 1, third: 2, fourth: 3, one: 0, two: 1, three: 2, four: 3, "1": 0, "2": 1, "3": 2, "4": 3 };
+    return opts[map[letter[1]]] || null;
+  }
+  let best = null, bestScore = 0;
+  for (const o of opts) { const s = heardScore(alts || [raw], o); if (s > bestScore) { bestScore = s; best = o; } }
+  return bestScore >= 0.7 ? best : null;
+}
+function onQuiz(t, raw, meta) {
+  const q = state.quiz[state.qi];
+  let choice = matchOption(raw, meta.alts);
+  const gaveUp = !choice && /\b(i don t know|no idea|not sure|skip|pass|tell me|give up)\b/.test(t);
+  if (!choice && !gaveUp) {
+    const o = state.options;
+    agentSay(["I didn't catch one of the choices. Is it " + o.slice(0, -1).join(", ") + ", or " + o[o.length - 1] + "?"], { word: null });
+    return;
+  }
+  const ok = choice === q.w;
+  res(q).quiz = ok;
+  if (ok) { state.score++; state.mastered.add(q.w); markUser(meta.el, true, "Correct"); }
+  else { state.missed.push(q); state.mastered.delete(q.w); if (!gaveUp) markUser(meta.el, false, "Missed"); }
+  savePrefs(); renderMastered();
+  el.options.hidden = true;
+  renderCard(q, "reveal"); renderSession();
+  agentSay(ok ? [pick(["Yes!", "Correct!", "Exactly."]) + " " + cap(q.w) + "."] : [(gaveUp ? "The answer is " : "Not quite. The answer is ") + q.w + ".", q.ex], { word: q.w });
+  state.qi++;
+  if (state.qi < state.quiz.length) askQuiz(); else finishRound();
+}
+function finishRound() {
+  state.phase = "summary";
+  const n = state.quiz.length, s = state.score;
+  const missed = state.missed.map(w => w.w);
+  const head = s === n ? "Perfect, " + n + " out of " + n + "!" : "You got " + s + " out of " + n + ".";
+  const review = missed.length ? "Let's keep practising " + listJoin(missed) + "." : "Every word stuck.";
+  const html = '<div class="summary"><div class="score">' + s + "/" + n + "<small>" + (s === n ? "every word stuck" : "words recalled") + "</small></div>" +
+    (missed.length ? '<div>Review next time: ' + missed.map(m => "<mark>" + esc(m) + "</mark>").join(", ") + "</div>" : "") +
+    '<div class="chips"><button class="chip primary" type="button" data-cmd="again">Practise these again</button><button class="chip" type="button" data-cmd="new words">New words</button><button class="chip" type="button" data-cmd="done">Finish</button></div></div>';
+  agentSay([head, review, "Say again to practise these words once more, new words for a fresh set, or done to finish."],
+    { word: null, prompt: true, html, onStart: () => { renderChips(); el.options.hidden = true; } });
+}
+function onSummary(t) {
+  if (/\b(new|fresh|different|another|next|more)\b/.test(t)) startSession(null, { fresh: true });
+  else if (/\b(again|retry|same|once more|practi[sc]e|redo)\b/.test(t)) startSession(state.words.slice(), { again: true });
+  else if (/\b(done|stop|bye|goodbye|finish|end|that s all|no thanks|quit|exit|enough)\b/.test(t)) endSession();
+  else agentSay(["Say again to practise the same words, new words for a fresh set, or done to finish."], { word: null, prompt: true });
+}
+function endSession() {
+  state.phase = "ready";
+  agentSay(["Great work today. Come back tomorrow and I'll start with the words you found tricky."], { word: null, onStart: () => { showReady(); renderSession(); } });
+}
+function pause() {
+  stopSpeaking(); abortListening();
+  state.paused = true; updateUI();
+  showInterim("Paused. Tap the mic or type to carry on.", false);
+}
+function repeatLast() {
+  if (state.lastPrompt) agentSay(state.lastPrompt.parts, { word: state.lastPrompt.word });
+  else resumePrompt();
+}
+function resumePrompt() {
+  const w = curWord();
+  if (state.phase === "repeat" && w) agentSay(["Back to " + w.w + ".", state.mic === "ok" ? "Say it back to me." : "Type it to practise the spelling."], { word: w.w });
+  else if (state.phase === "sentence" && w) agentSay(["Back to " + w.w + ". Try using it in a sentence."], { word: w.w });
+  else if (state.phase === "quiz") repeatLast();
+  else if (state.phase === "summary") agentSay(["Say again, new words, or done."], { word: null });
+}
+function sayHelp() {
+  const lines = state.mic === "ok" ? ["You can say: repeat, slower, faster, spell it, example, what does it mean, give me a hint, skip, quiz me, or stop."] :
+    ["You can type: repeat, slower, spell it, example, meaning, hint, skip, or quiz me. You can also tap the buttons under the conversation."];
+  lines.push(aiReady() ? "You can also ask what any word means, or say teach me words about a topic." : "You can also ask what any word in my sets means.");
+  agentSay(lines, { word: null });
+}
+function findWord(word) { const k = word.toLowerCase(); return allWords().find(w => w.w === k) || null; }
+async function explainWord(word) {
+  let e = findWord(word);
+  if (!e && aiReady()) { e = await aiWord(word); if (e) customWords.push(e); }
+  if (!e) {
+    agentSay([sampleFn ? "Sorry, I couldn't look up " + word + " right now." : cap(word) + " isn't in my word bank yet. On this page I can explain the " + allWords().length + " words in my sets."], { word: null });
+    resumePrompt(); return;
+  }
+  agentSay([cap(e.w) + " is " + art(e.pos) + " " + e.pos + " meaning " + e.def + ".", "For example: " + e.ex], { word: e.w, html: glossHtml(e) });
+  if (state.phase === "ready") agentSay(["Type teach me " + e.w + " to practise it."], { word: e.w });
+  else resumePrompt();
+}
+async function teachSingle(word) {
+  let e = findWord(word);
+  if (!e && aiReady()) { e = await aiWord(word); if (e) customWords.push(e); }
+  if (!e) { agentSay([cap(word) + " isn't in my word bank yet. Pick one of my sets, or ask me about a word like candid or ephemeral."], { word: null }); return; }
+  startSession([e], { single: true });
+}
+async function topicDeck(topic) {
+  topic = topic.trim().slice(0, 60);
+  if (!topic) return;
+  if (!aiReady()) { agentSay(["Custom topics need Claude, which isn't available on this page. Pick one of my three sets instead."], { word: null }); return; }
+  showInterim("Building a word set about " + topic + "…", false);
+  const words = await aiDeck(topic);
+  showInterim("", false);
+  if (words.length < 3) { agentSay(["I couldn't build a set about " + topic + " just now. Try a different topic, or pick one of my sets."], { word: null }); return; }
+  DECKS.custom = { name: cap(topic), short: topic, level: "Custom topic", blurb: "Made by Claude", words };
+  state.deckId = "custom"; renderDecks();
+  startSession(words.slice(), {});
+}
+
+/* ---------- Input routing ---------- */
+async function handleInput(raw, meta = {}) {
+  const text = String(raw || "").trim();
+  if (!text) return;
+  if (state.busy) { addNote("One moment, I'm still thinking about your last answer."); return; }
+  meta.el = addUser(text, meta.source || "typed");
+  if (meta.source !== "voice") abortListening();
+  stopSpeaking();
+  state.paused = false; showInterim("", false);
+  const t = norm(text);
+  try {
+    if (await routeIntent(t, text, meta)) return;
+    switch (state.phase) {
+      case "repeat": onRepeat(t, text, meta); break;
+      case "sentence": await onSentence(t, text, meta); break;
+      case "quiz": onQuiz(t, text, meta); break;
+      case "summary": onSummary(t); break;
+      case "ready": agentSay(["Pick a word set and press Start, or ask me what a word means."], { word: null }); break;
+      default: break;
+    }
+  } catch (e) {
+    console.error(e);
+    agentSay(["Sorry, something went wrong on my side. Let's keep going."], { word: null });
+  }
+}
+async function routeIntent(t, raw, meta) {
+  const n = t ? t.split(" ").length : 0;
+  const ph = state.phase, w = curWord();
+  // Real answers win over commands.
+  if (ph === "repeat" && w && n <= 4) {
+    const s = meta.source === "voice" ? heardScore(meta.alts || [raw], w.w) : sim(t.replace(/[\s'-]/g, ""), w.w.replace(/[\s'-]/g, ""));
+    if (s >= 0.6) return false;
+  }
+  if (ph === "sentence" && w && n >= 3 && containsWord(raw, w.w) && !/^(what|define|teach)\b/.test(t)) return false;
+  if (ph === "quiz" && matchOption(raw, meta.alts)) return false;
+  let m;
+  if ((m = t.match(/\bteach me (?:some |more |a few )?(?:new )?(?:words|vocabulary|vocab) (?:about|on|for|related to|around|to do with) (.+)$/))) { await topicDeck(m[1]); return true; }
+  if ((m = t.match(/\bteach me (?:the word |a word |the meaning of )?([a-z][a-z-]{2,})$/)) && !/^(words?|vocabulary|vocab|more|something|anything|english)$/.test(m[1])) { await teachSingle(m[1]); return true; }
+  m = t.match(/\bwhat (?:does|is) (?:the word )?([a-z][a-z-]+) mean\b/) || t.match(/\b(?:define|definition of|meaning of|what is the meaning of) (?:the word )?([a-z][a-z-]+)\b/);
+  if (m && !["it", "that", "this", "the", "a"].includes(m[1])) {
+    if (ph === "quiz" && state.options.includes(m[1])) { agentSay(["Nice try! That would give the answer away."], { word: null }); return true; }
+    await explainWord(m[1]); return true;
+  }
+  if (n > 7) return false;
+  if (/^(stop|pause|wait|hold on|be quiet|quiet|shh+|stop talking)\b/.test(t)) { pause(); return true; }
+  if (/\b(help|what can i (say|do)|commands)\b/.test(t)) { sayHelp(); return true; }
+  if (ph !== "ready") {
+    if (/\b(slower|slow down|too fast|more slowly)\b/.test(t)) { setRate(state.rate - 0.15); agentSay(["Okay, slowing down."], { word: null }); repeatLast(); return true; }
+    if (/\b(faster|speed up|too slow|quicker)\b/.test(t)) { setRate(state.rate + 0.15); agentSay(["Okay, a little faster."], { word: null }); return true; }
+    if (/\b(repeat|say (that|it) again|one more time|pardon|come again|didn t (hear|catch)|what did you say)\b/.test(t) || (t === "again" && ph !== "summary")) { repeatLast(); return true; }
+  }
+  if (ph === "quiz") {
+    const q = state.quiz[state.qi];
+    if (/\b(hint|clue|help me)\b/.test(t)) { agentSay(["Here's a hint: it starts with " + q.w[0].toUpperCase() + ", and it has " + q.w.length + " letters."], { word: null }); return true; }
+    if (/\b(options|choices)\b/.test(t)) { agentSay(["Your choices are " + listJoin(state.options) + "."], { word: null }); return true; }
+  }
+  if (w) {
+    if (/\b(spell|spelling|spelt|spelled)\b/.test(t)) { agentSay([cap(w.w) + " is spelled", { text: spellOut(w.w) + ".", rate: state.rate * 0.85 }], { word: w.w }); return true; }
+    if (/\b(pronounce|say the word|how do you say|say it slowly|say it again slowly)\b/.test(t)) { agentSay([{ text: w.w + ".", rate: state.rate * 0.7 }, { text: w.w + "." }], { word: w.w }); return true; }
+    if (/\b(example|another sentence|use it in a sentence)\b/.test(t)) { agentSay(["Here's an example: " + w.ex], { word: w.w }); return true; }
+    if (/\b(meaning|definition|what does it mean|what s it mean|define it|what is it)\b/.test(t)) { agentSay([cap(w.w) + " means " + w.def + "."], { word: w.w }); return true; }
+    if (/\b(synonym|similar|another word)\b/.test(t)) { agentSay([w.syn ? "A similar word is " + w.syn + "." : "I don't have a close synonym for that one."], { word: w.w }); return true; }
+    if (/\b(tip|hint|remember|origin|etymology|come from)\b/.test(t)) { agentSay([w.tip ? "Memory tip: " + w.tip : "Try linking it to a moment in your own day."], { word: w.w }); return true; }
+    if (/\b(skip|next|move on|pass|i don t know|no idea|next word)\b/.test(t)) { skipWord(); return true; }
+    if (/\b(quiz me|quiz|test me)\b/.test(t)) {
+      const taught = state.words.slice(0, state.idx + 1);
+      if (taught.length < 2) agentSay(["Let's learn at least two words first, then I'll quiz you."], { word: w.w });
+      else startQuiz(taught);
+      return true;
+    }
+  }
+  if (ph === "ready" && /\b(start|begin|let s go|go|yes|ready)\b/.test(t)) { startSession(); return true; }
+  return false;
+}
+
+/* ---------- Rendering ---------- */
+function renderCard(w, mode) {
+  const d = deck();
+  const quiz = mode === "quiz";
+  el.card.dataset.mode = mode;
+  if (mode === "preview") el.cardNo.textContent = "Up first";
+  else if (quiz || mode === "reveal") el.cardNo.textContent = "Quiz · " + Math.min(state.qi + 1, state.quiz.length) + " of " + state.quiz.length;
+  else el.cardNo.textContent = "No. " + (state.idx + 1) + " of " + state.words.length;
+  el.cardDeck.textContent = d.name + " · " + d.level;
+  el.hw.textContent = quiz ? "? ? ?" : w.w;
+  el.hw.classList.toggle("masked", quiz);
+  el.hw.classList.toggle("long", !quiz && w.w.length > 11);
+  el.hear.hidden = quiz;
+  el.say.textContent = quiz ? "" : (w.say || "");
+  el.pos.textContent = quiz ? "Which word means…" : w.pos;
+  el.def.innerHTML = esc(cap(w.def)) + ".";
+  el.ex.hidden = quiz; el.ex.innerHTML = quiz ? "" : "“" + highlight(w.ex, w.w) + "”";
+  el.synRow.hidden = quiz || !w.syn; el.syn.textContent = w.syn || "";
+  el.tipRow.hidden = quiz || !w.tip; el.tip.textContent = w.tip || "";
+  el.card.dataset.word = w.w;
+}
+function renderSession() {
+  const list = state.words.length ? state.words : chooseWords(deck());
+  const inQuiz = state.phase === "quiz" || state.phase === "summary";
+  el.sessTitle.textContent = state.phase === "ready" ? (state.started ? "Last session" : "Today’s words") : inQuiz ? "Quiz" : "This session";
+  const done = state.phase === "ready" ? 0 : inQuiz ? state.qi : state.idx;
+  el.sessCount.textContent = state.phase === "ready" && !state.started ? list.length + " words" : (inQuiz ? state.score + " correct" : Math.min(done, list.length) + " / " + list.length + " learned");
+  el.slist.innerHTML = list.map((w, i) => {
+    const r = state.results[w.w] || {};
+    let cls = "";
+    if (r.quiz === true) cls = "ok"; else if (r.quiz === false) cls = "miss";
+    else if (!inQuiz && state.phase !== "ready" && i === state.idx) cls = "cur";
+    else if (r.sentence !== undefined || r.said || r.skipped) cls = "done";
+    const mark = cls === "ok" ? "✓ " : cls === "miss" ? "↺ " : "";
+    return '<li class="' + cls + '">' + mark + esc(w.w) + "</li>";
+  }).join("");
+}
+function renderOptions() {
+  const keys = ["A", "B", "C", "D"];
+  el.options.innerHTML = state.options.map((o, i) => '<button class="opt" type="button" data-opt="' + esc(o) + '"><span class="key">' + keys[i] + "</span><span>" + esc(o) + "</span></button>").join("");
+  el.options.hidden = false; fitDock();
+}
+function renderChips() {
+  const ph = state.phase;
+  let c = [];
+  if (ph === "repeat") c = ["repeat", "slower", "spell it", "example", "skip", "help"];
+  else if (ph === "sentence") c = ["example", "meaning", "similar word", "repeat", "skip", "help"];
+  else if (ph === "quiz") c = ["hint", "repeat", "I don't know"];
+  else if (ph === "summary") c = ["again", "new words", "done"];
+  if (ph !== "quiz") el.options.hidden = true;
+  el.chips.innerHTML = c.map(x => '<button class="chip" type="button" data-cmd="' + esc(x) + '">' + esc(cap(x)) + "</button>").join("");
+  fitDock();
+}
+function renderDecks() {
+  const ids = DECKS.custom ? [...BUILTIN, "custom"] : BUILTIN;
+  el.decks.style.gridTemplateColumns = "repeat(" + Math.min(ids.length, 4) + ", minmax(0, 1fr))";
+  if (window.matchMedia("(max-width: 420px)").matches && ids.length > 3) el.decks.style.gridTemplateColumns = "repeat(2, minmax(0, 1fr))";
+  el.decks.innerHTML = ids.map(id => {
+    const d = DECKS[id];
+    return '<button class="deck" type="button" data-deck="' + id + '" aria-pressed="' + (id === state.deckId) + '"><span class="lvl">' + esc(d.level) + '</span><span class="nm">' + esc(d.name) + '</span><span class="ds">' + esc(d.blurb) + "</span></button>";
+  }).join("");
+}
+function renderMastered() {
+  const n = state.mastered.size;
+  el.mastered.hidden = n === 0;
+  el.mastered.textContent = n + (n === 1 ? " word" : " words") + " mastered";
+}
+function showLive() { el.readyDock.hidden = true; el.liveDock.hidden = false; renderChips(); fitDock(); resizeWave(); }
+function showReady() { el.readyDock.hidden = false; el.liveDock.hidden = true; el.options.hidden = true; renderDecks(); fitDock(); }
+function updateUI() {
+  const s = state.listening ? "listening" : state.speaking ? "speaking" : state.thinking ? "thinking" : state.paused ? "paused" : "idle";
+  el.pill.dataset.s = s;
+  el.statusText.textContent = state.probing ? "Allow microphone" :
+    { listening: "Listening", speaking: "Wren is speaking", thinking: "Thinking", paused: "Paused" }[s] ||
+    (["repeat", "sentence", "quiz", "summary"].includes(state.phase) ? "Your turn" : "Ready");
+  const micOk = state.mic === "ok" || state.mic === "unknown";
+  el.mic.dataset.s = s;
+  if (s === "listening") { el.mic.innerHTML = ICON.stop; el.micLabel.textContent = "Tap when done"; el.mic.disabled = false; el.mic.setAttribute("aria-label", "Stop listening"); }
+  else if (s === "speaking") { el.mic.innerHTML = ICON.stop; el.micLabel.textContent = micOk ? "Tap to interrupt" : "Tap to stop"; el.mic.disabled = false; el.mic.setAttribute("aria-label", "Stop Wren speaking"); }
+  else if (s === "thinking") { el.mic.innerHTML = ICON.dots; el.micLabel.textContent = "Thinking"; el.mic.disabled = true; }
+  else if (!micOk) { el.mic.innerHTML = ICON.off; el.micLabel.textContent = "Mic off here"; el.mic.disabled = true; el.mic.setAttribute("aria-label", "Microphone unavailable"); }
+  else { el.mic.innerHTML = ICON.mic; el.micLabel.textContent = s === "paused" ? "Tap to resume" : "Tap to talk"; el.mic.disabled = false; el.mic.setAttribute("aria-label", "Talk to Wren"); }
+  waveMode = s;
+  if (reduceMotion) drawWave(performance.now());
+}
+function fitDock() {
+  requestAnimationFrame(() => { document.documentElement.style.setProperty("--dock-h", el.dock.offsetHeight + "px"); });
+}
+if (typeof ResizeObserver === "function") new ResizeObserver(fitDock).observe(el.dock);
+
+/* ---------- Waveform ---------- */
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const ctx = el.wave.getContext("2d");
+let waveMode = "idle", amp = 0.04, bump = 0;
+function bumpWave(v) { bump = Math.max(bump, v); }
+function resizeWave() {
+  const dpr = window.devicePixelRatio || 1, w = el.wave.clientWidth, h = el.wave.clientHeight;
+  if (!w || !h) return;
+  if (el.wave.width !== Math.round(w * dpr) || el.wave.height !== Math.round(h * dpr)) { el.wave.width = Math.round(w * dpr); el.wave.height = Math.round(h * dpr); }
+}
+function drawWave(ts) {
+  resizeWave();
+  const dpr = window.devicePixelRatio || 1, W = el.wave.width / dpr, H = el.wave.height / dpr;
+  if (!W) return;
+  const cs = getComputedStyle(document.documentElement);
+  const color = waveMode === "listening" ? cs.getPropertyValue("--accent") : waveMode === "speaking" ? cs.getPropertyValue("--margin") : waveMode === "thinking" ? cs.getPropertyValue("--think") : cs.getPropertyValue("--muted");
+  const base = { speaking: 0.32, listening: 0.12, thinking: 0.14, idle: 0.03, paused: 0.02 }[waveMode] || 0.03;
+  const target = base + bump * (waveMode === "speaking" ? 0.5 : 0.7) + (waveMode === "speaking" && !reduceMotion ? 0.12 * Math.sin(ts / 170) : 0);
+  amp += (target - amp) * (reduceMotion ? 1 : 0.12);
+  bump *= 0.9;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  ctx.strokeStyle = cs.getPropertyValue("--rule").trim(); ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
+  ctx.strokeStyle = color.trim(); ctx.lineWidth = 2; ctx.lineJoin = "round";
+  const t = reduceMotion ? 0 : ts / 1000;
+  const speed = waveMode === "thinking" ? 7 : 3;
+  ctx.beginPath();
+  for (let x = 0; x <= W; x += 2) {
+    const env = Math.sin(Math.PI * x / W);
+    const y = H / 2 + env * amp * (H / 2 - 3) * (0.6 * Math.sin(x * 0.045 + t * speed) + 0.4 * Math.sin(x * 0.12 - t * speed * 1.7));
+    if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+}
+function loop(ts) { if (!el.liveDock.hidden) drawWave(ts); requestAnimationFrame(loop); }
+if (!reduceMotion) requestAnimationFrame(loop);
+
+/* ---------- Settings ---------- */
+function setRate(v) { state.rate = clamp(Math.round(v * 20) / 20, 0.6, 1.4); el.rate.value = state.rate; el.rateOut.textContent = state.rate.toFixed(2) + "×"; savePrefs(); }
+el.langSel.value = state.lang;
+el.hf.checked = state.handsFree; el.mute.checked = state.muted; setRate(state.rate);
+el.settingsBtn.addEventListener("click", () => { const open = el.settings.hidden; el.settings.hidden = !open; el.settingsBtn.setAttribute("aria-expanded", String(open)); });
+document.addEventListener("click", (e) => { if (!el.settings.hidden && !el.settings.contains(e.target) && !el.settingsBtn.contains(e.target)) { el.settings.hidden = true; el.settingsBtn.setAttribute("aria-expanded", "false"); } });
+el.langSel.addEventListener("change", () => { state.lang = el.langSel.value; state.voiceURI = ""; pickVoice(); renderVoiceSelect(); savePrefs(); });
+el.voiceSel.addEventListener("change", () => { state.voiceURI = el.voiceSel.value; pickVoice(); savePrefs(); });
+el.rate.addEventListener("input", () => setRate(Number(el.rate.value)));
+el.hf.addEventListener("change", () => { state.handsFree = el.hf.checked; savePrefs(); });
+el.mute.addEventListener("change", () => { state.muted = el.mute.checked; if (state.muted) stopSpeaking(); savePrefs(); });
+el.aiChk.addEventListener("change", () => { state.aiOn = el.aiChk.checked; renderAI(); savePrefs(); });
+el.test.addEventListener("click", () => { primeSpeech(); agentSay(["Hi, this is how I sound."], { word: null }); });
+
+/* ---------- Events ---------- */
+el.decks.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-deck]"); if (!b) return;
+  state.deckId = b.dataset.deck; savePrefs(); renderDecks();
+  state.words = []; state.results = {};
+  renderCard(chooseWords(deck())[0], "preview"); renderSession();
+});
+el.startBtn.addEventListener("click", () => { if (state.phase !== "ready") return; primeSpeech(); startSession(state.deckId === "custom" ? DECKS.custom.words.slice() : null); });
+el.topicBtn.addEventListener("click", () => { primeSpeech(); const v = el.topicIn.value; if (v.trim()) { addUser("Teach me words about " + v.trim(), "typed"); topicDeck(v); } });
+el.topicIn.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); el.topicBtn.click(); } });
+el.mic.addEventListener("click", () => {
+  primeSpeech();
+  if (state.listening) { finishListening(); return; }
+  if (state.speaking || queue.length) { stopSpeaking(); if (state.mic !== "ok") return; }
+  state.paused = false; state.silences = 0; showInterim("", false);
+  if (state.mic === "ok") listen();
+});
+el.chips.addEventListener("click", (e) => { const b = e.target.closest("[data-cmd]"); if (b) { primeSpeech(); handleInput(b.dataset.cmd, { source: "tap" }); } });
+el.log.addEventListener("click", (e) => { const b = e.target.closest("[data-cmd]"); if (b && state.phase === "summary") { primeSpeech(); handleInput(b.dataset.cmd, { source: "tap" }); } });
+el.options.addEventListener("click", (e) => { const b = e.target.closest("[data-opt]"); if (b) { primeSpeech(); handleInput(b.dataset.opt, { source: "tap" }); } });
+el.form.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const v = el.input.value; el.input.value = "";
+  primeSpeech();
+  if (state.phase === "ready" && /^\s*(start|begin|let'?s go)\s*$/i.test(v)) { startSession(); return; }
+  handleInput(v, { source: "typed" });
+});
+el.hear.addEventListener("click", () => {
+  primeSpeech();
+  const w = el.card.dataset.word; if (!w) return;
+  if (synth && !state.muted) { stopSpeaking(); const g = gen; speakParts([{ text: w + ".", rate: state.rate * 0.85 }], g); }
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") { if (!el.settings.hidden) { el.settings.hidden = true; el.settingsBtn.setAttribute("aria-expanded", "false"); el.settingsBtn.focus(); } else if (state.phase !== "ready") pause(); }
+});
+document.addEventListener("visibilitychange", () => { if (document.hidden && state.listening) abortListening(); });
+window.addEventListener("resize", () => { resizeWave(); fitDock(); });
+
+/* ---------- First frame ---------- */
+renderDecks(); renderMastered(); renderAI();
+renderCard(chooseWords(deck())[0], "preview"); renderSession();
+addAgent("Hi, I’m Wren. I teach new words out loud: you hear each word, say it back to me, use it in a sentence of your own, and then I quiz you. Choose a set below and press Start.", null);
+if (!SR) setMic("unsupported");
+updateUI(); fitDock();
+})();
+</script>
+
+</body>
+</html>
